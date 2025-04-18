@@ -162,10 +162,50 @@
     {/if}
 
     <div class="operations">
-        <div class="merge-section">
-            <h3>Merge PDFs</h3>
-            {#if files.length > 0}
-                <div class="file-list">
+        {#if files.length === 0}
+            <div class="empty-state">
+                <p>Select PDF files to begin</p>
+                <p class="hint">Select multiple files for merging or a single file for splitting</p>
+            </div>
+        {:else if files.length === 1}
+            <div class="split-section">
+                <h3>Split PDF</h3>
+                <p class="page-count">Total Pages: {totalPages}</p>
+                <div class="page-range">
+                    <div class="range-inputs">
+                        <div class="range-input">
+                            <label for="start-page">Start Page:</label>
+                            <input
+                                type="number"
+                                id="start-page"
+                                bind:value={startPage}
+                                min="1"
+                                max={totalPages}
+                                placeholder="Start page"
+                            />
+                        </div>
+                        <div class="range-input">
+                            <label for="end-page">End Page:</label>
+                            <input
+                                type="number"
+                                id="end-page"
+                                bind:value={endPage}
+                                min="1"
+                                max={totalPages}
+                                placeholder="End page"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <button on:click={splitPdfAtPages}>Split PDF</button>
+                {#if splitPdf}
+                    <button on:click={downloadSplitPdf}>Download Split PDF</button>
+                {/if}
+            </div>
+        {:else if files.length >= 2}
+            <div class="merge-section">
+                <h3>Merge PDFs</h3>
+                <div class="file-list" role="list">
                     <p class="sort-hint">Drag files to reorder them</p>
                     {#each files as file (file.name)}
                         <div
@@ -175,59 +215,22 @@
                             on:dragover={handleDragOver}
                             on:drop={(e) => handleDrop(e, file)}
                             on:dragend={handleDragEnd}
+                            role="listitem"
+                            aria-label="{file.name} - drag to reorder"
                         >
-                            <span class="drag-handle">⋮⋮</span>
+                            <span class="drag-handle" aria-hidden="true">⋮⋮</span>
                             <span class="file-name">{file.name}</span>
                         </div>
                     {/each}
                 </div>
-            {/if}
-            <button on:click={mergePdfs} disabled={files.length < 2}>
-                Merge PDFs
-            </button>
-            {#if mergedPdf}
-                <button on:click={downloadMergedPdf}>Download Merged PDF</button>
-            {/if}
-        </div>
-
-        <div class="split-section">
-            <h3>Split PDF</h3>
-            {#if files.length === 1}
-                <p class="page-count">Total Pages: {totalPages}</p>
-            {/if}
-            <div class="page-range">
-                <div class="range-inputs">
-                    <div class="range-input">
-                        <label for="start-page">Start Page:</label>
-                        <input
-                            type="number"
-                            id="start-page"
-                            bind:value={startPage}
-                            min="1"
-                            max={totalPages}
-                            placeholder="Start page"
-                        />
-                    </div>
-                    <div class="range-input">
-                        <label for="end-page">End Page:</label>
-                        <input
-                            type="number"
-                            id="end-page"
-                            bind:value={endPage}
-                            min="1"
-                            max={totalPages}
-                            placeholder="End page"
-                        />
-                    </div>
-                </div>
+                <button on:click={mergePdfs} disabled={files.length < 2}>
+                    Merge PDFs
+                </button>
+                {#if mergedPdf}
+                    <button on:click={downloadMergedPdf}>Download Merged PDF</button>
+                {/if}
             </div>
-            <button on:click={splitPdfAtPages} disabled={files.length !== 1}>
-                Split PDF
-            </button>
-            {#if splitPdf}
-                <button on:click={downloadSplitPdf}>Download Split PDF</button>
-            {/if}
-        </div>
+        {/if}
     </div>
 
     <div class="reset-section">
@@ -247,9 +250,10 @@
     }
 
     .operations {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+        display: flex;
+        justify-content: center;
         gap: 2rem;
+        flex-wrap: wrap;
     }
 
     .merge-section, .split-section {
@@ -257,6 +261,9 @@
         border: 1px solid #ccc;
         border-radius: 4px;
         box-sizing: border-box;
+        min-width: 350px; /* Fixed width for both sections */
+        max-width: 650px; /* Maximum width to prevent overflow */
+        min-height: 350px; /* Minimum height to maintain consistency */
     }
 
     .page-range {
@@ -384,5 +391,16 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         color: #333;
+    }
+
+    .empty-state {
+        text-align: center;
+        color: #666;
+        font-size: 1rem;
+    }
+
+    .hint {
+        font-size: 0.9rem;
+        color: #999;
     }
 </style>
