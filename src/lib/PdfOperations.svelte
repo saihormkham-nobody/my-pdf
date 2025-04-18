@@ -182,6 +182,7 @@
             a.download = `merged_${fileNames}.pdf`;
             a.click();
             URL.revokeObjectURL(url);
+            mergedPdf = null; // Reset after download
         }
     }
 
@@ -196,6 +197,7 @@
             a.download = `${nameWithoutExt}_${startPage}-${endPage}.pdf`;
             a.click();
             URL.revokeObjectURL(url);
+            splitPdf = null; // Reset after download
         }
     }
 </script>
