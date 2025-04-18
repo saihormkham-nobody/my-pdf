@@ -9,6 +9,7 @@
     let totalPages: number = 0;
     let error: string | null = null;
     let draggedFile: File | null = null;
+    let ignoreEncryption: boolean = false;
 
     function resetAll() {
         files = [];
@@ -74,14 +75,47 @@
             error = null;
             const mergedPdfDoc = await PDFDocument.create();
 
+            // Track problematic files
+            const encryptedFiles: string[] = [];
+
             for (const file of files) {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdfDoc = await PDFDocument.load(arrayBuffer);
-                const pages = await mergedPdfDoc.copyPages(pdfDoc, pdfDoc.getPageIndices());
-                pages.forEach(page => mergedPdfDoc.addPage(page));
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    // Try loading with the encryption option
+                    const pdfDoc = await PDFDocument.load(arrayBuffer, {
+                        ignoreEncryption: ignoreEncryption
+                    });
+                    const pages = await mergedPdfDoc.copyPages(pdfDoc, pdfDoc.getPageIndices());
+                    pages.forEach(page => mergedPdfDoc.addPage(page));
+                } catch (fileError) {
+                    // Check if it's an encryption error
+                    if (fileError instanceof Error && fileError.message.includes('encrypted')) {
+                        encryptedFiles.push(file.name);
+                    } else {
+                        // Rethrow other errors
+                        throw fileError;
+                    }
+                }
             }
 
-            mergedPdf = await mergedPdfDoc.save();
+            if (encryptedFiles.length > 0) {
+                if (!ignoreEncryption) {
+                    // If we found encrypted files and aren't ignoring encryption
+                    error = `The following files are password-protected: ${encryptedFiles.join(', ')}. Enable "Ignore encryption" option to attempt merging anyway.`;
+                    return;
+                } else if (encryptedFiles.length === files.length) {
+                    // If all files are encrypted and we couldn't process any
+                    error = 'Could not merge any files. All PDFs are encrypted and could not be processed.';
+                    return;
+                }
+            }
+
+            // Only save if we have pages
+            if (mergedPdfDoc.getPageCount() > 0) {
+                mergedPdf = await mergedPdfDoc.save();
+            } else {
+                error = 'No pages could be merged from the selected files.';
+            }
         } catch (e) {
             error = 'Error merging PDFs: ' + (e as Error).message;
         }
@@ -178,7 +212,7 @@
                 </svg>
             </div>
             <div class="file-input-text">
-                <span>Choose PDF files or drag them here</span>
+                <span>Choose PDF files</span>
                 <span class="file-input-hint">Select multiple files for merging or a single file for splitting</span>
             </div>
         </label>
@@ -316,6 +350,7 @@
     .file-input-text {
         display: flex;
         flex-direction: column;
+        justify-content: start;
         color: #e4e4e4;
     }
 
@@ -360,6 +395,20 @@
         text-align: left;
         font-size: 0.9rem;
         color: #a0aec0;
+    }
+
+    .range-inputs {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .range-input {
+        flex: 1;
+    }
+
+    .page-range {
+        margin: 1rem 0;
     }
 
     button {
