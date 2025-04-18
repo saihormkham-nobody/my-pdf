@@ -8,6 +8,7 @@
     let endPage: number = 1;
     let totalPages: number = 0;
     let error: string | null = null;
+    let draggedFile: File | null = null;
 
     function resetAll() {
         files = [];
@@ -22,6 +23,30 @@
         if (fileInput) {
             fileInput.value = '';
         }
+    }
+
+    function handleDragStart(file: File) {
+        draggedFile = file;
+    }
+
+    function handleDragOver(event: DragEvent) {
+        event.preventDefault();
+    }
+
+    function handleDrop(event: DragEvent, targetFile: File) {
+        event.preventDefault();
+        if (draggedFile && draggedFile !== targetFile) {
+            const draggedIndex = files.indexOf(draggedFile);
+            const targetIndex = files.indexOf(targetFile);
+            files.splice(draggedIndex, 1);
+            files.splice(targetIndex, 0, draggedFile);
+            files = [...files]; // Trigger reactivity
+        }
+        draggedFile = null;
+    }
+
+    function handleDragEnd() {
+        draggedFile = null;
     }
 
     async function handleFileSelect(event: Event) {
@@ -139,6 +164,24 @@
     <div class="operations">
         <div class="merge-section">
             <h3>Merge PDFs</h3>
+            {#if files.length > 0}
+                <div class="file-list">
+                    <p class="sort-hint">Drag files to reorder them</p>
+                    {#each files as file (file.name)}
+                        <div
+                            class="file-item"
+                            draggable="true"
+                            on:dragstart={() => handleDragStart(file)}
+                            on:dragover={handleDragOver}
+                            on:drop={(e) => handleDrop(e, file)}
+                            on:dragend={handleDragEnd}
+                        >
+                            <span class="drag-handle">⋮⋮</span>
+                            <span class="file-name">{file.name}</span>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
             <button on:click={mergePdfs} disabled={files.length < 2}>
                 Merge PDFs
             </button>
@@ -292,5 +335,54 @@
         margin: 0.5rem 0;
         color: #666;
         font-size: 0.9rem;
+    }
+
+    .file-list {
+        margin: 1rem 0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        max-height: 300px;
+        overflow-y: auto;
+        background-color: white;
+    }
+
+    .sort-hint {
+        margin: 0.5rem;
+        color: #666;
+        font-size: 0.9rem;
+        text-align: center;
+    }
+
+    .file-item {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem;
+        border-bottom: 1px solid #eee;
+        background-color: white;
+        cursor: move;
+    }
+
+    .file-item:last-child {
+        border-bottom: none;
+    }
+
+    .file-item:hover {
+        background-color: #f5f5f5;
+    }
+
+    .drag-handle {
+        margin-right: 0.75rem;
+        color: #666;
+        cursor: move;
+        font-size: 1.2rem;
+    }
+
+    .file-name {
+        flex: 1;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #333;
     }
 </style>
