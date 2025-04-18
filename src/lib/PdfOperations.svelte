@@ -127,7 +127,24 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            const fileNames = files.map(file => file.name.replace('.pdf', '')).join('_');
+
+            // Handle filename generation with length limits
+            let fileNames = "";
+            if (files.length <= 3) {
+                // Use all filenames if 3 or fewer files
+                fileNames = files.map(file => file.name.replace('.pdf', '')).join('_');
+            } else {
+                // Use first two filenames + count for more files
+                const firstTwo = files.slice(0, 2).map(file => file.name.replace('.pdf', '')).join('_');
+                fileNames = `${firstTwo}_and_${files.length - 2}_more`;
+            }
+
+            // Limit the overall length to prevent excessively long filenames
+            const maxLength = 50;
+            if (fileNames.length > maxLength) {
+                fileNames = fileNames.substring(0, maxLength - 3) + "...";
+            }
+
             a.download = `merged_${fileNames}.pdf`;
             a.click();
             URL.revokeObjectURL(url);
@@ -152,9 +169,23 @@
 <div class="pdf-operations">
     <h2>PDF Operations</h2>
 
-    <div class="file-input">
-        <input type="file" accept=".pdf" multiple on:change={handleFileSelect} />
-        <p>Selected files: {files.length}</p>
+    <div class="file-input-container">
+        <label for="file-input" class="file-input-label">
+            <div class="file-input-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                    <polyline points="13 2 13 9 20 9"></polyline>
+                </svg>
+            </div>
+            <div class="file-input-text">
+                <span>Choose PDF files or drag them here</span>
+                <span class="file-input-hint">Select multiple files for merging or a single file for splitting</span>
+            </div>
+        </label>
+        <input id="file-input" type="file" accept=".pdf" multiple on:change={handleFileSelect} />
+        {#if files.length > 0}
+            <p class="selected-count">Selected files: {files.length}</p>
+        {/if}
     </div>
 
     {#if error}
@@ -233,74 +264,124 @@
         {/if}
     </div>
 
-    <div class="reset-section">
-        <button class="reset-button" on:click={resetAll}>Reset All</button>
-    </div>
+    {#if files.length > 0}
+        <div class="reset-section">
+            <button class="reset-button" on:click={resetAll}>Reset All</button>
+        </div>
+    {/if}
 </div>
 
 <style>
     .pdf-operations {
-        max-width: 800px;
+        max-width: 650px;
+        width: 100%;
         margin: 0 auto;
         padding: 2rem;
+        background-color: #1e1e2e;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        color: #e4e4e4;
     }
 
-    .file-input {
+    h2, h3 {
+        color: #e4e4e4;
+        margin-bottom: 1.5rem;
+    }
+
+    .file-input-container {
         margin-bottom: 2rem;
+    }
+
+    .file-input-label {
+        display: flex;
+        align-items: center;
+        padding: 2rem;
+        border: 2px dashed #64b5f6;
+        border-radius: 8px;
+        background-color: #2d3748;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .file-input-label:hover, .file-input-label:focus {
+        border-color: #90caf9;
+        background-color: #3a4b63;
+    }
+
+    .file-input-icon {
+        margin-right: 1.5rem;
+        color: #64b5f6;
+    }
+
+    .file-input-text {
+        display: flex;
+        flex-direction: column;
+        color: #e4e4e4;
+    }
+
+    .file-input-hint {
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+        color: #a0aec0;
+    }
+
+    .selected-count {
+        margin-top: 1rem;
+        font-weight: 500;
+        color: #e4e4e4;
     }
 
     .operations {
         display: flex;
         justify-content: center;
+        align-items: stretch;
         gap: 2rem;
         flex-wrap: wrap;
     }
 
     .merge-section, .split-section {
-        padding: 1.5rem;
-        border: 1px solid #ccc;
-        border-radius: 4px;
+        padding: 1rem;
+        border: 1px solid #3a4b63;
+        border-radius: 8px;
         box-sizing: border-box;
-        min-width: 350px; /* Fixed width for both sections */
-        max-width: 650px; /* Maximum width to prevent overflow */
-        min-height: 350px; /* Minimum height to maintain consistency */
+        width: 100%;
+        min-height: 350px;
+        background-color: #2d3748;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
 
-    .page-range {
-        margin: 1rem 0;
-    }
-
-    .range-inputs {
-        display: flex;
-        gap: 1rem;
-    }
-
-    .range-input {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
+    .page-count {
+        margin: 0.5rem 0;
+        color: #a0aec0;
+        font-size: 0.9rem;
     }
 
     .range-input label {
         text-align: left;
         font-size: 0.9rem;
-        color: #666;
+        color: #a0aec0;
     }
 
     button {
         margin: 0.5rem 0;
-        padding: 0.5rem 1rem;
-        background-color: #4CAF50;
+        padding: 0.75rem 1rem;
+        background-color: #4299e1;
         color: white;
         border: none;
         border-radius: 4px;
         cursor: pointer;
         width: 100%;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+        background-color: #3182ce;
     }
 
     button:disabled {
-        background-color: #cccccc;
+        background-color: #4a5568;
+        color: #a0aec0;
         cursor: not-allowed;
     }
 
@@ -309,53 +390,45 @@
         margin: 0.5rem 0;
         width: 100%;
         box-sizing: border-box;
-        border: 1px solid #ccc;
+        border: 1px solid #4a5568;
         border-radius: 4px;
+        background-color: #2d3748;
+        color: #e4e4e4;
     }
 
     .error {
-        color: red;
+        color: #feb2b2;
         margin: 1rem 0;
-        padding: 0.5rem;
-        background-color: #ffebee;
-        border-radius: 4px;
-    }
-
-    .reset-section {
-        margin-top: 2rem;
-        text-align: center;
+        padding: 0.75rem;
+        background-color: #422b3a;
+        border-radius: 6px;
+        border-left: 4px solid #f56565;
     }
 
     .reset-button {
-        background-color: #f44336;
+        background-color: #f56565;
         padding: 0.75rem 1.5rem;
-        font-size: 1.1rem;
+        font-size: 1rem;
         width: auto;
         display: inline-block;
     }
 
     .reset-button:hover {
-        background-color: #d32f2f;
-    }
-
-    .page-count {
-        margin: 0.5rem 0;
-        color: #666;
-        font-size: 0.9rem;
+        background-color: #e53e3e;
     }
 
     .file-list {
         margin: 1rem 0;
-        border: 1px solid #ccc;
+        border: 1px solid #4a5568;
         border-radius: 4px;
         max-height: 300px;
         overflow-y: auto;
-        background-color: white;
+        background-color: #2d3748;
     }
 
     .sort-hint {
         margin: 0.5rem;
-        color: #666;
+        color: #a0aec0;
         font-size: 0.9rem;
         text-align: center;
     }
@@ -364,8 +437,8 @@
         display: flex;
         align-items: center;
         padding: 0.75rem;
-        border-bottom: 1px solid #eee;
-        background-color: white;
+        border-bottom: 1px solid #4a5568;
+        background-color: #2d3748;
         cursor: move;
     }
 
@@ -374,12 +447,12 @@
     }
 
     .file-item:hover {
-        background-color: #f5f5f5;
+        background-color: #3a4b63;
     }
 
     .drag-handle {
         margin-right: 0.75rem;
-        color: #666;
+        color: #a0aec0;
         cursor: move;
         font-size: 1.2rem;
     }
@@ -390,17 +463,34 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: #333;
+        color: #e4e4e4;
     }
 
     .empty-state {
+        width: 100%;
+        min-height: 350px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
         text-align: center;
-        color: #666;
+        color: #a0aec0;
         font-size: 1rem;
+        padding: 1.5rem;
+        border: 1px dashed #4a5568;
+        border-radius: 8px;
     }
 
     .hint {
         font-size: 0.9rem;
-        color: #999;
+        color: #718096;
+    }
+
+    input[type="file"] {
+        opacity: 0;
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
     }
 </style>
