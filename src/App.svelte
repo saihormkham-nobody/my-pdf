@@ -3,7 +3,7 @@
 </script>
 
 <main>
-  <h1>PDF Manipulation Tool</h1>
+  <h1>Made with Love for Koe</h1>
   <PdfOperations />
 </main>
 
