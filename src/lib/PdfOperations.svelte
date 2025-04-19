@@ -38,10 +38,12 @@
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
+    event.stopPropagation(); // Stop propagation to prevent global handlers from firing
   }
 
   function handleDrop(event: DragEvent, targetFile: File) {
     event.preventDefault();
+    event.stopPropagation(); // Stop propagation to prevent global handlers from firing
     if (draggedFile && draggedFile !== targetFile) {
       const draggedIndex = files.indexOf(draggedFile);
       const targetIndex = files.indexOf(targetFile);
@@ -52,7 +54,9 @@
     draggedFile = null;
   }
 
-  function handleDragEnd() {
+  function handleDragEnd(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation(); // Stop propagation to prevent global handlers from firing
     draggedFile = null;
   }
 
