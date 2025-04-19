@@ -150,13 +150,47 @@
 
       // Only save if we have pages
       if (mergedPdfDoc.getPageCount() > 0) {
-        mergedPdf = await mergedPdfDoc.save();
+        const pdfBytes = await mergedPdfDoc.save();
+        downloadMergedPdf(pdfBytes);
       } else {
         error = "No pages could be merged from the selected files.";
       }
     } catch (e) {
       error = "Error merging PDFs: " + (e as Error).message;
     }
+  }
+
+  function downloadMergedPdf(pdfBytes: Uint8Array) {
+    const blob = new Blob([pdfBytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+
+    // Handle filename generation with length limits
+    let fileNames = "";
+    if (files.length <= 3) {
+      // Use all filenames if 3 or fewer files
+      fileNames = files
+        .map((file) => file.name.replace(".pdf", ""))
+        .join("_");
+    } else {
+      // Use first two filenames + count for more files
+      const firstTwo = files
+        .slice(0, 2)
+        .map((file) => file.name.replace(".pdf", ""))
+        .join("_");
+      fileNames = `${firstTwo}_and_${files.length - 2}_more`;
+    }
+
+    // Limit the overall length to prevent excessively long filenames
+    const maxLength = 50;
+    if (fileNames.length > maxLength) {
+      fileNames = fileNames.substring(0, maxLength - 3) + "...";
+    }
+
+    a.download = `merged_${fileNames}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function splitPdfAtPages() {
@@ -195,61 +229,23 @@
       const pages = await splitPdfDoc.copyPages(pdfDoc, pageIndices);
       pages.forEach((page) => splitPdfDoc.addPage(page));
 
-      splitPdf = await splitPdfDoc.save();
+      const pdfBytes = await splitPdfDoc.save();
+      downloadSplitPdf(pdfBytes);
     } catch (e) {
       error = "Error splitting PDF: " + (e as Error).message;
     }
   }
 
-  function downloadMergedPdf() {
-    if (mergedPdf) {
-      const blob = new Blob([mergedPdf], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-
-      // Handle filename generation with length limits
-      let fileNames = "";
-      if (files.length <= 3) {
-        // Use all filenames if 3 or fewer files
-        fileNames = files
-          .map((file) => file.name.replace(".pdf", ""))
-          .join("_");
-      } else {
-        // Use first two filenames + count for more files
-        const firstTwo = files
-          .slice(0, 2)
-          .map((file) => file.name.replace(".pdf", ""))
-          .join("_");
-        fileNames = `${firstTwo}_and_${files.length - 2}_more`;
-      }
-
-      // Limit the overall length to prevent excessively long filenames
-      const maxLength = 50;
-      if (fileNames.length > maxLength) {
-        fileNames = fileNames.substring(0, maxLength - 3) + "...";
-      }
-
-      a.download = `merged_${fileNames}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      mergedPdf = null; // Reset after download
-    }
-  }
-
-  function downloadSplitPdf() {
-    if (splitPdf) {
-      const blob = new Blob([splitPdf], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const originalName = files[0].name;
-      const nameWithoutExt = originalName.replace(".pdf", "");
-      a.download = `${nameWithoutExt}_${startPage}-${endPage}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      splitPdf = null; // Reset after download
-    }
+  function downloadSplitPdf(pdfBytes: Uint8Array) {
+    const blob = new Blob([pdfBytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const originalName = files[0].name;
+    const nameWithoutExt = originalName.replace(".pdf", "");
+    a.download = `${nameWithoutExt}_${startPage}-${endPage}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function removeFile(fileToRemove: File) {
@@ -408,9 +404,6 @@
           </div>
         </div>
         <button on:click={splitPdfAtPages}>Split PDF</button>
-        {#if splitPdf}
-          <button on:click={downloadSplitPdf}>Download Split PDF</button>
-        {/if}
       </div>
     {:else if files.length >= 2}
       <div class="merge-section">
@@ -445,9 +438,6 @@
         <button on:click={mergePdfs} disabled={files.length < 2}>
           Merge PDFs
         </button>
-        {#if mergedPdf}
-          <button on:click={downloadMergedPdf}>Download Merged PDF</button>
-        {/if}
       </div>
     {/if}
   </div>
