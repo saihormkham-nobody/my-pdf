@@ -10,6 +10,8 @@
     let error: string | null = null;
     let draggedFile: File | null = null;
     let ignoreEncryption: boolean = false;
+    let isDragOver: boolean = false;
+    let hasProcessedFirstFile: boolean = false;
 
     function resetAll() {
         files = [];
@@ -19,6 +21,7 @@
         endPage = 1;
         totalPages = 0;
         error = null;
+        hasProcessedFirstFile = false;
         // Reset file input
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
         if (fileInput) {
@@ -26,6 +29,7 @@
         }
     }
 
+    // For reordering files in the list
     function handleDragStart(file: File) {
         draggedFile = file;
     }
@@ -50,23 +54,71 @@
         draggedFile = null;
     }
 
+    // For drag-and-drop file area
+    function handleAreaDragOver(event: DragEvent) {
+        event.preventDefault();
+        isDragOver = true;
+    }
+
+    function handleAreaDragLeave() {
+        isDragOver = false;
+    }
+
+    async function handleAreaDrop(event: DragEvent) {
+        event.preventDefault();
+        isDragOver = false;
+
+        if (!event.dataTransfer?.files) return;
+
+        const newFiles = Array.from(event.dataTransfer.files).filter(file =>
+            file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+        );
+
+        if (newFiles.length === 0) return;
+
+        // Add new files to existing files
+        await processNewFiles(newFiles);
+    }
+
+    async function processNewFiles(newFiles: File[]) {
+        if (newFiles.length === 0) return;
+
+        // Check for duplicate file names
+        const existingFileNames = new Set(files.map(f => f.name));
+        const uniqueNewFiles = newFiles.filter(file => !existingFileNames.has(file.name));
+
+        // Handle the case where all files are duplicates
+        if (uniqueNewFiles.length === 0) {
+            error = "All selected files are already added. Duplicate filenames are not allowed.";
+            return;
+        }
+
+        // Add unique new files to the collection
+        files = [...files, ...uniqueNewFiles];
+
+        // If this is our first file or we only have one file after adding, process it for splitting
+        if (files.length === 1 || (!hasProcessedFirstFile && files.length > 0)) {
+            try {
+                const file = files[0];
+                const arrayBuffer = await file.arrayBuffer();
+                const pdfDoc = await PDFDocument.load(arrayBuffer);
+                totalPages = pdfDoc.getPageCount();
+                endPage = totalPages;
+                hasProcessedFirstFile = true;
+            } catch (e) {
+                error = 'Error reading PDF: ' + (e as Error).message;
+            }
+        }
+
+        // Clear any previous errors
+        error = null;
+    }
+
     async function handleFileSelect(event: Event) {
         const input = event.target as HTMLInputElement;
-        if (input.files) {
-            files = Array.from(input.files);
-            if (files.length === 1) {
-                try {
-                    const file = files[0];
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdfDoc = await PDFDocument.load(arrayBuffer);
-                    totalPages = pdfDoc.getPageCount();
-                    endPage = totalPages;
-                } catch (e) {
-                    error = 'Error reading PDF: ' + (e as Error).message;
-                }
-            } else {
-                totalPages = 0;
-            }
+        if (input.files && input.files.length > 0) {
+            const newFiles = Array.from(input.files);
+            await processNewFiles(newFiles);
         }
     }
 
@@ -200,12 +252,54 @@
             splitPdf = null; // Reset after download
         }
     }
+
+    function removeFile(fileToRemove: File) {
+        files = files.filter(file => file !== fileToRemove);
+
+        // If we removed the first file but still have files, update the split info for the new first file
+        if (files.length > 0 && fileToRemove === files[0]) {
+            updateSplitInfo(files[0]);
+        }
+
+        // If we removed all files, reset
+        if (files.length === 0) {
+            resetPdfState();
+        }
+    }
+
+    function resetPdfState() {
+        mergedPdf = null;
+        splitPdf = null;
+        startPage = 1;
+        endPage = 1;
+        totalPages = 0;
+        hasProcessedFirstFile = false;
+    }
+
+    async function updateSplitInfo(file: File) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            totalPages = pdfDoc.getPageCount();
+            endPage = totalPages;
+        } catch (e) {
+            error = 'Error reading PDF: ' + (e as Error).message;
+        }
+    }
 </script>
 
 <div class="pdf-operations">
     <h2>PDF Operations</h2>
 
-    <div class="file-input-container">
+    <div
+        class="file-input-container"
+        class:drag-over={isDragOver}
+        on:dragover={handleAreaDragOver}
+        on:dragleave={handleAreaDragLeave}
+        on:drop={handleAreaDrop}
+        role="region"
+        aria-label="Drag and drop area for PDF files"
+    >
         <label for="file-input" class="file-input-label">
             <div class="file-input-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -216,6 +310,7 @@
             <div class="file-input-text">
                 <span>Choose PDF files</span>
                 <span class="file-input-hint">Select multiple files for merging or a single file for splitting</span>
+                <span class="file-input-drag-hint">Or drag & drop PDF files here</span>
             </div>
         </label>
         <input id="file-input" type="file" accept=".pdf" multiple on:change={handleFileSelect} />
@@ -237,7 +332,19 @@
         {:else if files.length === 1}
             <div class="split-section">
                 <h3>Split PDF</h3>
-                <p class="page-count">Total Pages: {totalPages}</p>
+                <div class="file-info">
+                    <div class="file-display">
+                        <span class="file-name-display">{files[0].name}</span>
+                        <button
+                            class="remove-file-split"
+                            on:click={() => removeFile(files[0])}
+                            aria-label="Remove file"
+                        >
+                            Remove File
+                        </button>
+                    </div>
+                    <p class="page-count">Total Pages: {totalPages}</p>
+                </div>
                 <div class="page-range">
                     <div class="range-inputs">
                         <div class="range-input">
@@ -287,6 +394,15 @@
                         >
                             <span class="drag-handle" aria-hidden="true">⋮⋮</span>
                             <span class="file-name">{file.name}</span>
+                            <button
+                                class="remove-file"
+                                on:click={() => removeFile(file)}
+                                aria-label="Remove {file.name}"
+                                tabindex="0"
+                                on:keydown={(e) => e.key === 'Delete' && removeFile(file)}
+                            >
+                                ✕
+                            </button>
                         </div>
                     {/each}
                 </div>
@@ -326,6 +442,8 @@
 
     .file-input-container {
         margin-bottom: 2rem;
+        position: relative;
+        transition: all 0.2s ease;
     }
 
     .file-input-label {
@@ -360,6 +478,19 @@
         margin-top: 0.5rem;
         font-size: 0.9rem;
         color: #a0aec0;
+    }
+
+    .file-input-drag-hint {
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+        color: #a0aec0;
+        font-style: italic;
+    }
+
+    .drag-over .file-input-label {
+        border-color: #90caf9;
+        background-color: #3a4b63;
+        box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.5);
     }
 
     .selected-count {
@@ -517,6 +648,24 @@
         color: #e4e4e4;
     }
 
+    .remove-file {
+        background: none;
+        border: none;
+        color: #a0aec0;
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        margin: 0;
+        font-size: 0.9rem;
+        width: auto;
+        transition: color 0.2s, background-color 0.2s;
+        border-radius: 4px;
+    }
+
+    .remove-file:hover {
+        color: #e53e3e;
+        background-color: rgba(229, 62, 62, 0.1);
+    }
+
     .empty-state {
         width: 100%;
         min-height: 350px;
@@ -543,5 +692,49 @@
         width: 0;
         height: 0;
         overflow: hidden;
+    }
+
+    .file-input-container.drag-over {
+        outline: 2px dashed #90caf9;
+        outline-offset: 2px;
+    }
+
+    .file-info {
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+        border-radius: 4px;
+        background-color: #2a3040;
+    }
+
+    .file-display {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+    }
+
+    .file-name-display {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #e4e4e4;
+        text-align: left;
+    }
+
+    .remove-file-split {
+        background-color: #e53e3e;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border: none;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        width: auto;
+    }
+
+    .remove-file-split:hover {
+        background-color: #c53030;
     }
 </style>
