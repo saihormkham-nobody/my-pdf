@@ -12,6 +12,7 @@
   let draggedFile: File | null = null;
   let ignoreEncryption: boolean = false;
   let hasProcessedFirstFile: boolean = false;
+  let pageRangeInput: string = "";
 
   function resetAll() {
     files = [];
@@ -22,6 +23,7 @@
     totalPages = 0;
     error = null;
     hasProcessedFirstFile = false;
+    pageRangeInput = "";
     // Reset file input
     const fileInput = document.querySelector(
       'input[type="file"]'
@@ -87,6 +89,7 @@
         const pdfDoc = await PDFDocument.load(arrayBuffer);
         totalPages = pdfDoc.getPageCount();
         endPage = totalPages;
+        pageRangeInput = `1-${totalPages}`;
         hasProcessedFirstFile = true;
       } catch (e) {
         error = "Error reading PDF: " + (e as Error).message;
@@ -197,6 +200,53 @@
     URL.revokeObjectURL(url);
   }
 
+  // Function to parse page ranges from input string
+  function parsePageRanges(input: string, maxPages: number): number[] {
+    if (!input.trim()) {
+      return [];
+    }
+
+    const pageSet = new Set<number>();
+    const rangeSegments = input.split(',').map(s => s.trim());
+
+    for (const segment of rangeSegments) {
+      // Check if it's a range (contains hyphen)
+      if (segment.includes('-')) {
+        const [start, end] = segment.split('-').map(num => parseInt(num.trim(), 10));
+
+        // Validate range values
+        if (isNaN(start) || isNaN(end)) {
+          throw new Error(`Invalid page range: ${segment}`);
+        }
+
+        if (start < 1 || end > maxPages || start > end) {
+          throw new Error(`Page range ${segment} is outside valid range (1-${maxPages})`);
+        }
+
+        // Add all pages in range
+        for (let i = start; i <= end; i++) {
+          pageSet.add(i);
+        }
+      } else {
+        // It's a single page
+        const page = parseInt(segment.trim(), 10);
+
+        if (isNaN(page)) {
+          throw new Error(`Invalid page number: ${segment}`);
+        }
+
+        if (page < 1 || page > maxPages) {
+          throw new Error(`Page ${page} is outside valid range (1-${maxPages})`);
+        }
+
+        pageSet.add(page);
+      }
+    }
+
+    // Convert set to sorted array
+    return Array.from(pageSet).sort((a, b) => a - b);
+  }
+
   async function splitPdfAtPages() {
     try {
       error = null;
@@ -210,44 +260,55 @@
       const pdfDoc = await PDFDocument.load(arrayBuffer);
       const totalPages = pdfDoc.getPageCount();
 
-      if (
-        startPage < 1 ||
-        startPage > totalPages ||
-        endPage < 1 ||
-        endPage > totalPages
-      ) {
-        error = "Invalid page range";
+      // Parse page ranges from input
+      let selectedPages: number[];
+      try {
+        selectedPages = parsePageRanges(pageRangeInput, totalPages);
+      } catch (e) {
+        error = (e as Error).message;
         return;
       }
 
-      if (startPage > endPage) {
-        error = "Start page must be less than or equal to end page";
+      if (selectedPages.length === 0) {
+        error = "Please select at least one page";
         return;
       }
 
       const splitPdfDoc = await PDFDocument.create();
-      const pageIndices = Array.from(
-        { length: endPage - startPage + 1 },
-        (_, i) => startPage - 1 + i
-      );
+
+      // Convert page numbers to indices (0-based)
+      const pageIndices = selectedPages.map(page => page - 1);
+
       const pages = await splitPdfDoc.copyPages(pdfDoc, pageIndices);
       pages.forEach((page) => splitPdfDoc.addPage(page));
 
       const pdfBytes = await splitPdfDoc.save();
-      downloadSplitPdf(pdfBytes);
+      downloadSplitPdf(pdfBytes, selectedPages);
     } catch (e) {
       error = "Error splitting PDF: " + (e as Error).message;
     }
   }
 
-  function downloadSplitPdf(pdfBytes: Uint8Array) {
+  function downloadSplitPdf(pdfBytes: Uint8Array, selectedPages: number[] = []) {
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     const originalName = files[0].name;
     const nameWithoutExt = originalName.replace(".pdf", "");
-    a.download = `${nameWithoutExt}_${startPage}-${endPage}.pdf`;
+
+    // Create a descriptive filename based on selected pages
+    let pageDesc: string;
+
+    if (selectedPages.length <= 5) {
+      // For few pages, include all page numbers
+      pageDesc = selectedPages.join('-');
+    } else {
+      // For many pages, show range
+      pageDesc = `${selectedPages[0]}-${selectedPages[selectedPages.length - 1]}`;
+    }
+
+    a.download = `${nameWithoutExt}_pages_${pageDesc}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -272,6 +333,7 @@
     startPage = 1;
     endPage = 1;
     totalPages = 0;
+    pageRangeInput = "";
     hasProcessedFirstFile = false;
   }
 
@@ -281,6 +343,7 @@
       const pdfDoc = await PDFDocument.load(arrayBuffer);
       totalPages = pdfDoc.getPageCount();
       endPage = totalPages;
+      pageRangeInput = `1-${totalPages}`;
     } catch (e) {
       error = "Error reading PDF: " + (e as Error).message;
     }
@@ -384,26 +447,22 @@
         <div class="page-range">
           <div class="range-inputs">
             <div class="range-input">
-              <label for="start-page">Start Page:</label>
+              <label for="page-range">Page Range:</label>
               <input
-                type="number"
-                id="start-page"
-                bind:value={startPage}
-                min="1"
-                max={totalPages}
-                placeholder="Start page"
+                type="text"
+                id="page-range"
+                bind:value={pageRangeInput}
+                placeholder="e.g., 1-3, 5, 7-9"
               />
-            </div>
-            <div class="range-input">
-              <label for="end-page">End Page:</label>
-              <input
-                type="number"
-                id="end-page"
-                bind:value={endPage}
-                min="1"
-                max={totalPages}
-                placeholder="End page"
-              />
+              <p class="range-help">
+                Enter page numbers or ranges separated by commas:
+                <br>
+                • Single pages: <code>1, 3, 5</code>
+                <br>
+                • Ranges: <code>1-5</code> (pages 1 through 5)
+                <br>
+                • Combined: <code>1-3, 5, 7-9</code>
+              </p>
             </div>
           </div>
         </div>
@@ -600,7 +659,8 @@
     cursor: not-allowed;
   }
 
-  input[type="number"] {
+  input[type="number"],
+  input[type="text"] {
     padding: 0.5rem;
     margin: 0.5rem 0;
     width: 100%;
@@ -771,5 +831,21 @@
 
   .remove-file-split:hover {
     background-color: #c53030;
+  }
+
+  .range-help {
+    font-size: 0.8rem;
+    color: #a0aec0;
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .range-help code {
+    background-color: #2a2d3a;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: #64b5f6;
   }
 </style>
